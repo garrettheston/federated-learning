@@ -22,8 +22,9 @@ from kyber_py.ml_kem import ML_KEM_512
 
 # The AES algorithm for the keys actually used after the KEM
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
+
+import pickle
 
 if __name__ == '__main__':    
     # parse args
@@ -80,16 +81,21 @@ if __name__ == '__main__':
 
     # Generating key pair
     ek, dk = ML_KEM_512.keygen()    
-    
     # Generating shared secret key
-    key, ct = ML_KEM_512.encaps(ek)
+    shared_key_sender, ct = ML_KEM_512.encaps(ek)
+    # Key decapsulation
+    shared_key_receiver = ML_KEM_512.decaps(dk, ct)
+    assert shared_key_sender == shared_key_receiver
+
+    aes_key = shared_key_receiver[:32]  # First 32 bytes for AES-256
+    iv = get_random_bytes(16)  # Generate random IV
     
-    # Key decapsulation to assert 
-    _key = ML_KEM_512.decaps(dk, ct)
-
-    # assert that the sender and receiver have the same value
-    assert key == _key
-
+    # Create distinct ciphers for both encryption and decryption
+    init_cipher = AES.new(shared_key_sender[:32], AES.MODE_OFB, iv)
+    another_cipher = AES.new(shared_key_receiver[:32], AES.MODE_OFB, iv)
+    
+    ciphertext = ""
+    
     if args.all_clients: 
         print("Aggregation over all clients")
         w_locals = [w_glob for i in range(args.num_users)]
@@ -103,17 +109,22 @@ if __name__ == '__main__':
             local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx])
             w, loss = local.train(net=copy.deepcopy(net_glob).to(args.device))
             
-            # encryption will apply to local model 
+            w_serialized = pickle.dumps(w) # serialize the data so that it can be encrypted
+            
+            # local model will send updates with ciphertext
+            ciphertext = init_cipher.encrypt(w_serialized)
             if args.all_clients:
-                w_locals[idx] = copy.deepcopy(w)
+                w_locals[idx] = copy.deepcopy(ciphertext)
             else:
-                w_locals.append(copy.deepcopy(w))
-                
+                w_locals.append(copy.deepcopy(ciphertext))
                 
             loss_locals.append(copy.deepcopy(loss))
         
-        # update global weights
-        # decryption of the model updates will occur first
+        # update global weights with plaintext
+        for i in range(len(w_locals)):
+            decrypted = another_cipher.decrypt(w_locals[i])
+            w_locals[i] = pickle.loads(decrypted)
+            
         w_glob = FedAvg(w_locals)
 
         # copy weight to net_glob
