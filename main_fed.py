@@ -17,8 +17,15 @@ from models.Nets import MLP, CNNMnist, CNNCifar
 from models.Fed import FedAvg
 from models.test import test_img
 
+# The NIST Module-Lattice-Based Key-Encapsulation Mechanism Standard ML-KEM 
+from kyber_py.ml_kem import ML_KEM_512
 
-if __name__ == '__main__':
+# The AES algorithm for the keys actually used after the KEM
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
+
+if __name__ == '__main__':    
     # parse args
     args = args_parser()
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
@@ -71,6 +78,18 @@ if __name__ == '__main__':
     best_loss = None
     val_acc_list, net_list = [], []
 
+    # Generating key pair
+    ek, dk = ML_KEM_512.keygen()    
+    
+    # Generating shared secret key
+    key, ct = ML_KEM_512.encaps(ek)
+    
+    # Key decapsulation to assert 
+    _key = ML_KEM_512.decaps(dk, ct)
+
+    # assert that the sender and receiver have the same value
+    assert key == _key
+
     if args.all_clients: 
         print("Aggregation over all clients")
         w_locals = [w_glob for i in range(args.num_users)]
@@ -83,12 +102,18 @@ if __name__ == '__main__':
         for idx in idxs_users:
             local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx])
             w, loss = local.train(net=copy.deepcopy(net_glob).to(args.device))
+            
+            # encryption will apply to local model 
             if args.all_clients:
                 w_locals[idx] = copy.deepcopy(w)
             else:
                 w_locals.append(copy.deepcopy(w))
+                
+                
             loss_locals.append(copy.deepcopy(loss))
+        
         # update global weights
+        # decryption of the model updates will occur first
         w_glob = FedAvg(w_locals)
 
         # copy weight to net_glob
