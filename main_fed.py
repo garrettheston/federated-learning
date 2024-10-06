@@ -24,7 +24,11 @@ from kyber_py.ml_kem import ML_KEM_512
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 
+# Import pickle for data serialization
 import pickle
+
+# Import hashlib for integrity validation
+import hashlib
 
 if __name__ == '__main__':    
     # parse args
@@ -80,19 +84,25 @@ if __name__ == '__main__':
     val_acc_list, net_list = [], []
 
     # Generating key pair
-    ek, dk = ML_KEM_512.keygen()    
+    ek, dk = ML_KEM_512.keygen()
     # Generating shared secret key
     shared_key_sender, ct = ML_KEM_512.encaps(ek)
     # Key decapsulation
     shared_key_receiver = ML_KEM_512.decaps(dk, ct)
     assert shared_key_sender == shared_key_receiver
 
-    aes_key = shared_key_receiver[:32]  # First 32 bytes for AES-256
     iv = get_random_bytes(16)  # Generate random IV
     
     # Create distinct ciphers for both encryption and decryption
     init_cipher = AES.new(shared_key_sender[:32], AES.MODE_OFB, iv)
     another_cipher = AES.new(shared_key_receiver[:32], AES.MODE_OFB, iv)
+    
+    # Hex digests before and after transmission
+    pre_transmission_vector = []
+    post_transmission_vector = []
+    
+    # Validae alteration
+    altered = False
     
     ciphertext = ""
     
@@ -110,6 +120,8 @@ if __name__ == '__main__':
             w, loss = local.train(net=copy.deepcopy(net_glob).to(args.device))
             
             w_serialized = pickle.dumps(w) # serialize the data so that it can be encrypted
+            hash_value = hashlib.sha256(w_serialized).hexdigest() # pre-transmission hex digest
+            pre_transmission_vector.append(hash_value)
             
             # local model will send updates with ciphertext
             ciphertext = init_cipher.encrypt(w_serialized)
@@ -123,8 +135,10 @@ if __name__ == '__main__':
         # update global weights with plaintext
         for i in range(len(w_locals)):
             decrypted = another_cipher.decrypt(w_locals[i])
+            hash_value = hashlib.sha256(decrypted).hexdigest() # post-transmission hex digest
+            post_transmission_vector.append(hash_value)
             w_locals[i] = pickle.loads(decrypted)
-            
+        
         w_glob = FedAvg(w_locals)
 
         # copy weight to net_glob
@@ -135,6 +149,10 @@ if __name__ == '__main__':
         print('Round {:3d}, Average loss {:.3f}'.format(iter, loss_avg))
         loss_train.append(loss_avg)
 
+    # intrusion detection for digests
+    for i in range(len(w_locals)):
+        assert pre_transmission_vector[i] == post_transmission_vector[i]
+        
     # plot loss curve
     plt.figure()
     plt.plot(range(len(loss_train)), loss_train)
