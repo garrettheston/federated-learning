@@ -91,6 +91,8 @@ if __name__ == '__main__':
     ciphertext = ""
     idxs_users = ""
     
+    count = 0
+    
     if args.all_clients: 
         print("Aggregation over all clients")
         w_locals = [w_glob for i in range(args.num_users)]
@@ -136,7 +138,7 @@ if __name__ == '__main__':
                 
             loss_locals.append(copy.deepcopy(loss))
         
-        # update global weights with plaintext
+        # update global weights with decrypted model updates
         for i in range(len(w_locals)):
             shared_key_receiver, iv = session_key_and_iv[i]
             new_cipher = AES.new(shared_key_receiver[:32], AES.MODE_OFB, iv)
@@ -171,16 +173,4 @@ if __name__ == '__main__':
     acc_test, loss_test = test_img(net_glob, dataset_test, args)
     print("Training accuracy: {:.2f}".format(acc_train))
     print("Testing accuracy: {:.2f}".format(acc_test))
-
-
-
-IV:  b'\x9e\x9d\x91\x82\x88\x83-\xf9c\xbao\xef\x99\xd2p\xd7'
-IV:  b'\x91`9:N\xd5@\xee\xa0\xad\xe4d6e\x92M'
-IV:  b'L\xfe\x8dJ\x90\xc2nm\x1dk:\xa55u\xd1%'
-IV:  b'\x98\x022\x84\xd8\xf9\x83\x18p\n\xf3\x9e\xb6\x01 \xaa'
-IV:  b'\xfd\x02\xec\xaa\xa4\x91\xc9\xe3\x8a\xbb\xbf}D\xa7\xf02'
-IV:  b'\xa1#\xd5.\xe5\xd80fA\x15\x0e\x9a\x83/\xde\x99'
-IV:  b'\xb4\xc5\xb2\x03\n\x15\x80\x1d\xebG\x1a\x91\x96\x1c\xc4\xdc'
-IV:  b'\x9eZ\x15;\x01\x92fG\x15\xdda\xb6x\xb8\x9eL'
-IV:  b'\xe0\x8d\xe2\xdcg9@\xc8L\x01=\x7f9\x82\x14\x9f'
-IV:  b"@'\xf8\xb9\x05\xbf\xd6\xf65\xf4\xac\xd2<\x08\xfd\xe1"
+    
