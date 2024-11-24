@@ -26,14 +26,15 @@ if __name__ == "__main__":
     
     st = "Sample model data provided for federated learning."
     
-    serialized = pickle.dumps(st)
-    ciphertext = ic.encrypt(serialized)
+    s = pickle.dumps(st)
+    ct = ic.encrypt(s)
     
-    plaintext = dc.decrypt(ciphertext) # Should be equivalent to serialized data
+    pt = dc.decrypt(ct) # Should be equivalent to s data
     
-    assert serialized == plaintext, "Unsuccessful cryptography"
+    assert s == pt, "Unsuccessful cryptography"
     
-    deserialized = pickle.loads(plaintext)
+    ds = pickle.loads(pt)
     
-    assert deserialized == st, "Unsuccessful serialization/deserialization"
+    assert ds == st, "Unsuccessful serialization/deserialization"
+    
     
