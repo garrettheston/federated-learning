@@ -18,7 +18,7 @@ if __name__ == "__main__":
     sks, ct = ML_KEM_512.encaps(ek)
     skr = ML_KEM_512.decaps(dk, ct)
     
-    assert sks == skr, "Cryptosystem key mismatch."
+    assert sks == skr, "Cryptosystem key mismatch: encapsulated and decapsulated keys are not identical."
     
     iv = get_random_bytes(16)
     ic = AES.new(sks[:32], AES.MODE_OFB, iv)
@@ -26,14 +26,15 @@ if __name__ == "__main__":
     
     st = "Sample model data provided for federated learning."
     
-    serialized = pickle.dumps(st)
-    ciphertext = ic.encrypt(serialized)
+    s = pickle.dumps(st)
+    ct = ic.encrypt(s)
     
-    plaintext = dc.decrypt(ciphertext) # Should be equivalent to serialized data
+    pt = dc.decrypt(ct) # Should be equivalent to s data
     
-    assert serialized == plaintext, "Unsuccessful cryptography"
+    assert s == pt, "Decryption failed: Serialized data does not match."
     
-    deserialized = pickle.loads(plaintext)
+    ds = pickle.loads(pt)
     
-    assert deserialized == st, "Unsuccessful serialization/deserialization"
+    assert ds == st, "Deserialization error: Original data does not match deserialized data."
+    
     
