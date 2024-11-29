@@ -23,41 +23,39 @@ class MLP(nn.Module):
         x = self.layer_hidden(x)
         return x
 
+class MNISTCNN(nn.Module):
+    def __init__(self, params):
+        super(MNISTCNN, self).__init__()
+        self.layer1 = nn.Conv2d(params.num_channels, 10, kernel_size=5) # 1 = params.num_channels
+        self.layer2 = nn.Conv2d(10, 20, kernel_size=5)
+        self.dropout_layer = nn.Dropout2d()
+        self.fc_layer1 = nn.Linear(320, 50)
+        self.fc_layer2 = nn.Linear(50, params.num_classes) # 10 = params.num_classes
 
-class CNNMnist(nn.Module):
-    def __init__(self, args):
-        super(CNNMnist, self).__init__()
-        self.conv1 = nn.Conv2d(args.num_channels, 10, kernel_size=5)
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.conv2_drop = nn.Dropout2d()
-        self.fc1 = nn.Linear(320, 50)
-        self.fc2 = nn.Linear(50, args.num_classes)
+    def forward(self, input_data):
+        data = F.relu(F.max_pool2d(self.layer1(input_data), 2))
+        data = F.relu(F.max_pool2d(self.dropout_layer(self.layer2(data)), 2))
+        data = data.view(data.size(0), -1)  # Flattening
+        data = F.relu(self.fc_layer1(data))
+        data = F.dropout(data, training=self.training)
+        output = self.fc_layer2(data)
+        return output
 
-    def forward(self, x):
-        x = F.relu(F.max_pool2d(self.conv1(x), 2))
-        x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
-        x = x.view(-1, x.shape[1]*x.shape[2]*x.shape[3])
-        x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training)
-        x = self.fc2(x)
-        return x
+class CIFARCNN(nn.Module):
+    def __init__(self, params):
+        super(CIFARCNN, self).__init__()
+        self.first_conv = nn.Conv2d(3, 6, kernel_size=5)
+        self.pool_layer = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.second_conv = nn.Conv2d(6, 16, kernel_size=5)
+        self.fc_first = nn.Linear(16 * 5 * 5, 120)
+        self.fc_second = nn.Linear(120, 84)
+        self.output_layer = nn.Linear(84, params.num_classes)
 
-
-class CNNCifar(nn.Module):
-    def __init__(self, args):
-        super(CNNCifar, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, args.num_classes)
-
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+    def forward(self, input_data):
+        data = self.pool_layer(F.relu(self.first_conv(input_data)))
+        data = self.pool_layer(F.relu(self.second_conv(data)))
+        data = data.view(data.size(0), -1)  # Flattening
+        data = F.relu(self.fc_first(data))
+        data = F.relu(self.fc_second(data))
+        output = self.output_layer(data)
+        return output
