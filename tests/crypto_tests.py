@@ -18,7 +18,7 @@ if __name__ == "__main__":
     sks, ct = ML_KEM_512.encaps(ek)
     skr = ML_KEM_512.decaps(dk, ct)
     
-    assert sks == skr, "Cryptosystem key mismatch."
+    assert sks == skr, "Cryptosystem key mismatch: encapsulated and decapsulated keys are not identical."
     
     iv = get_random_bytes(16)
     ic = AES.new(sks[:32], AES.MODE_OFB, iv)
@@ -31,10 +31,10 @@ if __name__ == "__main__":
     
     pt = dc.decrypt(ct) # Should be equivalent to s data
     
-    assert s == pt, "Unsuccessful cryptography"
+    assert s == pt, "Decryption failed: Serialized data does not match."
     
     ds = pickle.loads(pt)
     
-    assert ds == st, "Unsuccessful serialization/deserialization"
+    assert ds == st, "Deserialization error: Original data does not match deserialized data."
     
     

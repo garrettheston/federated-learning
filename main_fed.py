@@ -19,7 +19,7 @@ from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 import pickle
 from PyQt5.QtCore import QThread, pyqtSignal, QTimer
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QTabWidget, QProgressBar, QHBoxLayout, QTextEdit
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QTabWidget, QProgressBar, QHBoxLayout, QTextEdit, QPushButton, QMessageBox
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
@@ -31,6 +31,7 @@ class FederatedLearningThread(QThread):
     update_plot_signal = pyqtSignal(list)
     final_results_signal = pyqtSignal(float, float)
     process_status_signal = pyqtSignal(str)  # Signal for process status updates
+    hash_check_signal = pyqtSignal(str)  # Add this line
 
     def run(self):
         args = args_parser()
@@ -114,14 +115,18 @@ class FederatedLearningThread(QThread):
                 
                 loss_locals.append(copy.deepcopy(loss))
             
-            # decrypting the model updates and updating the global model
+            # Decryption
             for i in range(len(w_locals)):
                 shared_key_receiver, iv, idx = session_key_and_iv[i]
+                
                 self.process_status_signal.emit(f"Decryption: Model update for user {idx} decrypted successfully.")
+                
                 new_cipher = AES.new(shared_key_receiver[:32], AES.MODE_OFB, iv)
                 decrypted = new_cipher.decrypt(w_locals[i])
+                
                 hash_value = hashlib.sha256(decrypted).hexdigest() # post-transmission hex digest
                 post_transmission_vector.append(hash_value)
+                
                 w_locals[i] = pickle.loads(decrypted)
             
             w_glob = FedAvg(w_locals)
@@ -134,7 +139,11 @@ class FederatedLearningThread(QThread):
             
             # intrusion detection established by comparing sha256 hex digests before transmission and after transmission
             for i in range(len(w_locals)):
-                assert pre_transmission_vector[i] == post_transmission_vector[i]
+               #assert pre_transmission_vector[i] == post_transmission_vector[i]
+                if pre_transmission_vector[i] == post_transmission_vector[i]:
+                    self.hash_check_signal.emit(f"User {idx} integrity: PASS")
+                else:
+                    self.hash_check_signal.emit(f"User {idx} integrity: FAIL")
         
         self.update_plot_signal.emit(loss_train)  # update the plot
 
@@ -157,6 +166,19 @@ class FederatedLearningApp(QMainWindow):
 
         layout = QVBoxLayout(self.central_widget)
         self.tabs = QTabWidget()
+
+        # Create a top-right horizontal layout for controls
+        top_controls_layout = QHBoxLayout()
+        top_controls_layout.addStretch()  # Push content to the right
+
+        # Stop button
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.setStyleSheet("background-color: red; color: white; font-weight: bold;")
+        self.stop_button.clicked.connect(self.stop_training)  # Connect to stop_training method
+        top_controls_layout.addWidget(self.stop_button)
+
+        # Add top controls layout to the main layout
+        layout.addLayout(top_controls_layout)
 
         # Output Tab
         self.output_tab = QWidget()
@@ -203,6 +225,15 @@ class FederatedLearningApp(QMainWindow):
 
         layout.addWidget(self.tabs)
 
+        # SIAS Tab
+        self.sias_tab = QWidget()
+        self.sias_layout = QVBoxLayout(self.sias_tab)
+        self.sias_text = QTextEdit()
+        self.sias_text.setReadOnly(True)
+        self.sias_text.setPlaceholderText("Hash comparison results will appear here...")
+        self.sias_layout.addWidget(self.sias_text)
+        self.tabs.addTab(self.sias_tab, "SIAS")
+        
         self.final_acc_train = QLabel("Training accuracy: waiting...")
         self.final_acc_test = QLabel("Testing accuracy: waiting...")
         layout.addWidget(self.final_acc_train)
@@ -214,6 +245,7 @@ class FederatedLearningApp(QMainWindow):
         self.thread.update_plot_signal.connect(self.update_plot)
         self.thread.final_results_signal.connect(self.update_final_results)
         self.thread.process_status_signal.connect(self.update_process_status)  # Connect process status signal
+        self.thread.hash_check_signal.connect(self.update_sias_log)  # Connect to SIAS tab
 
         self.progress_timers = []
         for label, progress_bar in self.label_progress_bars:
@@ -256,6 +288,30 @@ class FederatedLearningApp(QMainWindow):
             self.encryption_status_text.append(message)
         elif message.startswith("Decryption"):
             self.decryption_status_text.append(message)
+            
+    def update_sias_log(self, message):
+        if "PASS" in message:
+            styled_message = f'<span style="color: green; font-weight: bold;">{message}</span>'
+        elif "FAIL" in message:
+            styled_message = f'<span style="color: red; font-weight: bold;">{message}</span>'
+        else:
+            styled_message = message  # Default style if neither PASS nor FAIL is present
+        self.sias_text.append(styled_message)
+
+    def stop_training(self):
+        reply = QMessageBox.question(
+            self, "Confirm Stop", 
+            "Are you sure you want to stop the training process?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            # Stop the thread safely
+            if self.thread.isRunning():
+                self.thread.terminate()
+                self.thread.wait()
+            QMessageBox.information(self, "Stopped", "The training process has been stopped.")
+            self.close()  # Optionally close the application
 
 if __name__ == "__main__":
     app = QApplication([])
