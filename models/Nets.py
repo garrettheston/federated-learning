@@ -6,7 +6,6 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-
 class MLP(nn.Module):
     def __init__(self, dim_in, dim_hidden, dim_out):
         super(MLP, self).__init__()
@@ -44,18 +43,21 @@ class MNISTCNN(nn.Module):
 class CIFARCNN(nn.Module):
     def __init__(self, params):
         super(CIFARCNN, self).__init__()
-        self.first_conv = nn.Conv2d(3, 6, kernel_size=5)
+        self.first_conv = nn.Conv2d(3, 32, kernel_size=5)
+        self.bn1 = nn.BatchNorm2d(32)
         self.pool_layer = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.second_conv = nn.Conv2d(6, 16, kernel_size=5)
-        self.fc_first = nn.Linear(16 * 5 * 5, 120)
-        self.fc_second = nn.Linear(120, 84)
-        self.output_layer = nn.Linear(84, params.num_classes)
+        self.second_conv = nn.Conv2d(32, 64, kernel_size=5)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.fc_first = nn.Linear(64 * 5 * 5, 256)
+        self.fc_second = nn.Linear(256, 128)
+        self.output_layer = nn.Linear(128, params.num_classes)
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, input_data):
-        data = self.pool_layer(F.relu(self.first_conv(input_data)))
-        data = self.pool_layer(F.relu(self.second_conv(data)))
+        data = self.pool_layer(F.relu(self.bn1(self.first_conv(input_data))))
+        data = self.pool_layer(F.relu(self.bn2(self.second_conv(data))))
         data = data.view(data.size(0), -1)  # Flattening
-        data = F.relu(self.fc_first(data))
-        data = F.relu(self.fc_second(data))
+        data = self.dropout(F.relu(self.fc_first(data)))
+        data = self.dropout(F.relu(self.fc_second(data)))
         output = self.output_layer(data)
         return output
