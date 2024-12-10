@@ -25,11 +25,11 @@ class MLP(nn.Module):
 class MNISTCNN(nn.Module):
     def __init__(self, params):
         super(MNISTCNN, self).__init__()
-        self.layer1 = nn.Conv2d(params.num_channels, 10, kernel_size=5) # 1 = params.num_channels
+        self.layer1 = nn.Conv2d(1, 10, kernel_size=5) # 1 = params.num_channels
         self.layer2 = nn.Conv2d(10, 20, kernel_size=5)
         self.dropout_layer = nn.Dropout2d()
         self.fc_layer1 = nn.Linear(320, 50)
-        self.fc_layer2 = nn.Linear(50, params.num_classes) # 10 = params.num_classes
+        self.fc_layer2 = nn.Linear(50, 10) # 10 = params.num_classes
 
     def forward(self, input_data):
         data = F.relu(F.max_pool2d(self.layer1(input_data), 2))

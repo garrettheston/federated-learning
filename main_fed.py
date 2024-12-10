@@ -94,19 +94,19 @@ class FederatedLearningThread(QThread):
 
                 # Derive cipher for encryption from PEM
                 init_cipher = AES.new(shared_key_sender[:32], AES.MODE_OFB, iv)
-            
-                # Append the receiver key and the iv to the dictionary
-                session_key_and_iv.append((shared_key_receiver,iv,idx))
-                
+                            
                 local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx])
                 w, loss = local.train(net=copy.deepcopy(net_glob).to(args.device))
                 
                 # Encryption
                 self.process_status_signal.emit(f"Encryption: Model update for user {idx} encrypted successfully.")
                 w_serialized = pickle.dumps(w)
-                hash_value = hashlib.sha256(w_serialized).hexdigest() # pre-transmission hex digest
-                pre_transmission_vector.append(hash_value)
+                pre_hash_value = hashlib.sha256(w_serialized).hexdigest() # pre-transmission hex digest
+                pre_transmission_vector.append(pre_hash_value)
                 ciphertext = init_cipher.encrypt(w_serialized)
+
+                # Append the receiver key and the iv to the dictionary
+                session_key_and_iv.append((shared_key_receiver,iv,idx,pre_hash_value))
 
                 if args.all_clients:
                     w_locals[idx] = copy.deepcopy(ciphertext)
@@ -117,16 +117,21 @@ class FederatedLearningThread(QThread):
             
             # Decryption
             for i in range(len(w_locals)):
-                shared_key_receiver, iv, idx = session_key_and_iv[i]
+                shared_key_receiver, iv, idx, pre_hash_value = session_key_and_iv[i]
                 
                 self.process_status_signal.emit(f"Decryption: Model update for user {idx} decrypted successfully.")
                 
                 new_cipher = AES.new(shared_key_receiver[:32], AES.MODE_OFB, iv)
                 decrypted = new_cipher.decrypt(w_locals[i])
                 
-                hash_value = hashlib.sha256(decrypted).hexdigest() # post-transmission hex digest
-                post_transmission_vector.append(hash_value)
+                post_hash_value = hashlib.sha256(decrypted).hexdigest() # post-transmission hex digest
+                post_transmission_vector.append(post_hash_value)
                 
+                if pre_hash_value == post_hash_value:
+                    self.hash_check_signal.emit(f"User {idx} integrity: PASS")
+                else:
+                    self.hash_check_signal.emit(f"User {idx} integrity: FAIL")
+
                 w_locals[i] = pickle.loads(decrypted)
             
             w_glob = FedAvg(w_locals)
@@ -138,12 +143,12 @@ class FederatedLearningThread(QThread):
             loss_train.append(loss_avg)
             
             # intrusion detection established by comparing sha256 hex digests before transmission and after transmission
-            for i in range(len(w_locals)):
+            #for i in range(len(w_locals)):
                #assert pre_transmission_vector[i] == post_transmission_vector[i]
-                if pre_transmission_vector[i] == post_transmission_vector[i]:
-                    self.hash_check_signal.emit(f"User {idx} integrity: PASS")
-                else:
-                    self.hash_check_signal.emit(f"User {idx} integrity: FAIL")
+                #if pre_transmission_vector[i] == post_transmission_vector[i]:
+                    #self.hash_check_signal.emit(f"User {idx} integrity: PASS")
+                #else:
+                    #self.hash_check_signal.emit(f"User {idx} integrity: FAIL")
         
         self.update_plot_signal.emit(loss_train)  # update the plot
 
