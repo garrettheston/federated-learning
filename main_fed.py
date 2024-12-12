@@ -67,9 +67,10 @@ class FederatedLearningThread(QThread):
         net_glob.train()
         w_glob = net_glob.state_dict()
         loss_train = []
+        acc_per_epoch = []  # List to store accuracy for each epoch
         self.process_status_signal.emit("Key pair generated successfully.")
         self.process_status_signal.emit("Encryption and decryption setup completed.")
-
+        args.epochs = 5
         # Hex digests before and after transmission
         pre_transmission_vector = []
         post_transmission_vector = []
@@ -82,7 +83,6 @@ class FederatedLearningThread(QThread):
 
             self.log_signal.emit("Training...", iter + 1)  # Set Labels to "Waiting..."
             for idx in idxs_users:
-                
                 # Generating session keypair
                 ek, dk = ML_KEM_512.keygen()
                 # Generating shared secret key
@@ -141,16 +141,12 @@ class FederatedLearningThread(QThread):
             loss_avg = sum(loss_locals) / len(loss_locals)
             self.log_signal.emit(f'Round {iter+1:3d}, Average loss {loss_avg:.3f}', iter + 1)
             loss_train.append(loss_avg)
-            
-            # intrusion detection established by comparing sha256 hex digests before transmission and after transmission
-            #for i in range(len(w_locals)):
-               #assert pre_transmission_vector[i] == post_transmission_vector[i]
-                #if pre_transmission_vector[i] == post_transmission_vector[i]:
-                    #self.hash_check_signal.emit(f"User {idx} integrity: PASS")
-                #else:
-                    #self.hash_check_signal.emit(f"User {idx} integrity: FAIL")
-        
-        self.update_plot_signal.emit(loss_train)  # update the plot
+
+            # Test model on training data to get accuracy
+            acc_train, _ = test_img(net_glob, dataset_train, args)
+            acc_per_epoch.append(acc_train)  # Save the training accuracy
+
+        self.update_plot_signal.emit(acc_per_epoch)  # Emit the accuracy values
 
         acc_train, loss_train = test_img(net_glob, dataset_train, args)
         acc_test, loss_test = test_img(net_glob, dataset_test, args)
